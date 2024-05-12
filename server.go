@@ -144,6 +144,7 @@ type Server struct {
 }
 
 type serverOptions struct {
+	baseCtx               context.Context
 	creds                 credentials.TransportCredentials
 	codec                 baseCodec
 	cp                    Compressor
@@ -175,6 +176,7 @@ type serverOptions struct {
 }
 
 var defaultServerOptions = serverOptions{
+	baseCtx:               context.Background(),
 	maxConcurrentStreams:  math.MaxUint32,
 	maxReceiveMessageSize: defaultServerMaxReceiveMessageSize,
 	maxSendMessageSize:    defaultServerMaxSendMessageSize,
@@ -231,6 +233,15 @@ func (mdo *joinServerOption) apply(do *serverOptions) {
 
 func newJoinServerOption(opts ...ServerOption) ServerOption {
 	return &joinServerOption{opts: opts}
+}
+
+// ValuesContext lets you set a context to be used as base context when serving
+// requests through the server. Before being used the context is passed through
+// context.WithoutCancel so that timeouts are not propagated.
+func ValuesContext(ctx context.Context) ServerOption {
+	return newFuncServerOption(func(o *serverOptions) {
+		o.baseCtx = context.WithoutCancel(ctx)
+	})
 }
 
 // SharedWriteBuffer allows reusing per-connection transport write buffer.
@@ -956,7 +967,7 @@ func (s *Server) handleRawConn(lisAddr string, rawConn net.Conn) {
 		return
 	}
 	go func() {
-		s.serveStreams(context.Background(), st, rawConn)
+		s.serveStreams(s.opts.baseCtx, st, rawConn)
 		s.removeConn(lisAddr, st)
 	}()
 }
